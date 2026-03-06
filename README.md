@@ -8,7 +8,7 @@ dekube transform that detects Bitnami Redis, PostgreSQL, and Keycloak services a
 
 ## Why
 
-Bitnami charts wrap standard images in custom entrypoints, init containers, and volume conventions that assume a full Kubernetes environment. In compose, these assumptions break: entrypoint chains fail, volume paths don't line up, Secret file mounts don't exist. The workarounds are well-known and documented in [common charts](https://docs.dekube.io/maintainer/known-workarounds/common-charts/) — this transform applies them automatically.
+Bitnami charts wrap standard images in custom entrypoints, init containers, and volume conventions that assume a full Kubernetes environment. In compose, these assumptions break: entrypoint chains fail, volume paths don't line up, Secret file mounts don't exist. The workarounds are well-known and documented in [common charts](https://helmfile2compose.dekube.io/known-workarounds/common-charts/) — this transform applies them automatically.
 
 ## What it does
 
