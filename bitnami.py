@@ -88,13 +88,18 @@ def _fix_postgresql(svc_name, svc, ctx):
     """Fix Bitnami PostgreSQL volume mounts."""
     volume_root = ctx.config.get("volume_root", "./data")
 
+    # Preserve existing non-data mounts (configmaps for init-scripts, etc.)
+    existing = [v for v in (svc.get("volumes") or [])
+                if ":/bitnami/postgresql" not in v
+                and ":/opt/bitnami/postgresql/secrets" not in v]
+
     volumes = [f"{volume_root}/{svc_name}:/bitnami/postgresql"]
     _log(f"{svc_name}: data volume → /bitnami/postgresql")
 
     volumes.append(f"./secrets/{svc_name}:/opt/bitnami/postgresql/secrets:ro")
     _log(f"{svc_name}: secrets mount → /opt/bitnami/postgresql/secrets")
 
-    svc["volumes"] = volumes
+    svc["volumes"] = volumes + existing
 
 
 # ---------------------------------------------------------------------------
