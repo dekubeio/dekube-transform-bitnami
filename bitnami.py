@@ -6,8 +6,7 @@ workarounds so they run in compose without manual overrides.
 Every modification is printed to stderr for transparency.
 """
 
-import base64
-import sys
+from dekube import secret_value, log  # pylint: disable=import-error  # h2c resolves at runtime
 
 
 # ---------------------------------------------------------------------------
@@ -19,23 +18,6 @@ class BitnamiWorkarounds:  # pylint: disable=too-few-public-methods  # contract:
 
     name = "bitnami"
     priority = 1500  # after converters, before flatten-internal-urls (2000)
-
-    def _log(self, msg):
-        print(f"  [{self.name}] {msg}", file=sys.stderr)
-
-    @staticmethod
-    def _secret_value(secret, key):
-        """Decode a value from a K8s Secret manifest."""
-        val = (secret.get("stringData") or {}).get(key)
-        if val is not None:
-            return val
-        val = (secret.get("data") or {}).get(key)
-        if val is not None:
-            try:
-                return base64.b64decode(val).decode("utf-8")
-            except (ValueError, UnicodeDecodeError):
-                return val
-        return None
 
     @staticmethod
     def _is_bitnami_image(svc, name_fragment):
@@ -65,28 +47,28 @@ class BitnamiWorkarounds:  # pylint: disable=too-few-public-methods  # contract:
 
         password = None
         if secret:
-            password = self._secret_value(secret, "redis-password")
+            password = secret_value(secret, "redis-password")
 
         svc["image"] = "redis:7-alpine"
-        self._log(f"{svc_name}: image → redis:7-alpine")
+        log(self.name, f"{svc_name}: image → redis:7-alpine")
 
         svc.pop("entrypoint", None)
-        self._log(f"{svc_name}: removed Bitnami entrypoint")
+        log(self.name, f"{svc_name}: removed Bitnami entrypoint")
 
         cmd = ["redis-server"]
         if password:
             cmd.extend(["--requirepass", password])
-            self._log(f"{svc_name}: password set from Secret '{sec_name}'")
+            log(self.name, f"{svc_name}: password set from Secret '{sec_name}'")
         else:
-            self._log(f"{svc_name}: ⚠ no redis-password found, running without auth")
+            log(self.name, f"{svc_name}: ⚠ no redis-password found, running without auth")
         svc["command"] = cmd
 
         volume_root = ctx.config.get("volume_root", "./data")
         svc["volumes"] = [f"{volume_root}/{svc_name}:/data"]
-        self._log(f"{svc_name}: volume → {volume_root}/{svc_name}:/data")
+        log(self.name, f"{svc_name}: volume → {volume_root}/{svc_name}:/data")
 
         svc.pop("environment", None)
-        self._log(f"{svc_name}: removed Bitnami environment")
+        log(self.name, f"{svc_name}: removed Bitnami environment")
 
     # ---------------------------------------------------------------------------
     # PostgreSQL
@@ -102,10 +84,10 @@ class BitnamiWorkarounds:  # pylint: disable=too-few-public-methods  # contract:
                     and ":/opt/bitnami/postgresql/secrets" not in v]
 
         volumes = [f"{volume_root}/{svc_name}:/bitnami/postgresql"]
-        self._log(f"{svc_name}: data volume → /bitnami/postgresql")
+        log(self.name, f"{svc_name}: data volume → /bitnami/postgresql")
 
         volumes.append(f"./secrets/{svc_name}:/opt/bitnami/postgresql/secrets:ro")
-        self._log(f"{svc_name}: secrets mount → /opt/bitnami/postgresql/secrets")
+        log(self.name, f"{svc_name}: secrets mount → /opt/bitnami/postgresql/secrets")
 
         svc["volumes"] = volumes + existing
 
@@ -125,20 +107,20 @@ class BitnamiWorkarounds:  # pylint: disable=too-few-public-methods  # contract:
 
         sec_name, secret = self._find_secret(ctx.secrets, sec_candidates)
         if secret:
-            admin_pw = self._secret_value(secret, "admin-password")
+            admin_pw = secret_value(secret, "admin-password")
             if admin_pw:
                 svc.setdefault("environment", {})["KC_BOOTSTRAP_ADMIN_PASSWORD"] = admin_pw
-                self._log(f"{svc_name}: KC_BOOTSTRAP_ADMIN_PASSWORD set from Secret '{sec_name}'")
+                log(self.name, f"{svc_name}: KC_BOOTSTRAP_ADMIN_PASSWORD set from Secret '{sec_name}'")
 
         # DB password — look in the keycloak-postgresql secret
         db_candidates = [f"{prefix}-postgresql" if prefix else "keycloak-postgresql",
                          "keycloak-postgresql"]
         db_sec_name, db_secret = self._find_secret(ctx.secrets, db_candidates)
         if db_secret:
-            db_pw = self._secret_value(db_secret, "password")
+            db_pw = secret_value(db_secret, "password")
             if db_pw:
                 svc.setdefault("environment", {})["KC_DB_PASSWORD"] = db_pw
-                self._log(f"{svc_name}: KC_DB_PASSWORD set from Secret '{db_sec_name}'")
+                log(self.name, f"{svc_name}: KC_DB_PASSWORD set from Secret '{db_sec_name}'")
 
     def _fix_keycloak_init(self, svc_name, compose_services):
         """Remove the Bitnami prepare-write-dirs init that fails on emptyDir."""
@@ -149,7 +131,7 @@ class BitnamiWorkarounds:  # pylint: disable=too-few-public-methods  # contract:
                 to_remove.append(name)
         for name in to_remove:
             del compose_services[name]
-            self._log(f"{name}: removed (emptyDir copy fails in compose)")
+            log(self.name, f"{name}: removed (emptyDir copy fails in compose)")
 
     def transform(self, compose_services, ingress_entries, ctx):  # pylint: disable=unused-argument  # Transform contract signature
         """Apply Bitnami-specific workarounds to compose services."""
