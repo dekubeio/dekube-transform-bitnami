@@ -57,7 +57,9 @@ class BitnamiWorkarounds:  # pylint: disable=too-few-public-methods  # contract:
 
         cmd = ["redis-server"]
         if password:
-            cmd.extend(["--requirepass", password])
+            # Compose interpolates $ in `command` (unlike `environment`, which the
+            # engine escapes for us later) — escape it ourselves or auth breaks.
+            cmd.extend(["--requirepass", password.replace("$", "$$")])
             log(self.name, f"{svc_name}: password set from Secret '{sec_name}'")
         else:
             log(self.name, f"{svc_name}: ⚠ no redis-password found, running without auth")
