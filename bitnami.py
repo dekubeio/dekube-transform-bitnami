@@ -20,10 +20,21 @@ class BitnamiWorkarounds:  # pylint: disable=too-few-public-methods  # contract:
     priority = 1500  # after converters, before flatten-internal-urls (2000)
 
     @staticmethod
+    def _repo_name(image):
+        """Extract the bare repository name (last path segment, no tag/digest) from an image ref."""
+        repo = image.split("@", 1)[0]  # strip digest (…@sha256:…)
+        head, sep, tail = repo.rpartition(":")
+        if sep and "/" not in tail:  # tail is a tag, not a registry :port
+            repo = head
+        return repo.rsplit("/", 1)[-1]
+
+    @staticmethod
     def _is_bitnami_image(svc, name_fragment):
-        """Check if a service uses a Bitnami image matching name_fragment."""
-        image = svc.get("image", "")
-        return "bitnami" in image and name_fragment in image
+        """Check if a service's image repo is exactly bitnami/<name_fragment>, any tag/digest/registry."""
+        image = svc.get("image", "") or ""
+        if "bitnami" not in image:
+            return False
+        return BitnamiWorkarounds._repo_name(image) == name_fragment
 
     @staticmethod
     def _find_secret(secrets, candidates):
