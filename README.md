@@ -69,14 +69,14 @@ Verify it loaded: `Loaded transforms: BitnamiWorkarounds` appears on stderr.
 
 ## Code quality
 
-*Last updated: 2026-02-23*
+*Last updated: 2026-09-24*
 
 | Metric | Value |
 |--------|-------|
-| Pylint | 10.00/10 |
+| Pylint | 9.78/10 |
 | Pyflakes | clean |
-| Radon MI | 62.14 (A) |
-| Radon avg CC | 4.1 (A) |
+| Radon MI | 61.80 (A) |
+| Radon avg CC | 4.4 (A) |
 
 No C-rated functions.
 
