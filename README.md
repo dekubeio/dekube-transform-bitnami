@@ -19,11 +19,12 @@ Every modification is logged to stderr for transparency.
 - Replaces the Bitnami image with stock `redis:7-alpine`
 - Removes the Bitnami entrypoint and environment
 - Sets `redis-server --requirepass <password>` from the K8s Secret
-- Mounts a data volume at `/data`
+- Mounts a data volume at `/data`: the `dekube.yaml` `volumes:` mapping of the PVC if there is one, `<volume_root>/<service>` otherwise
+- Swaps the chart's bash healthcheck (no bash in alpine) for `redis-cli ping`
 
 ### PostgreSQL (`bitnami/postgresql`)
 
-- Fixes volume mounts to `/bitnami/postgresql` (where the Bitnami entrypoint expects data)
+- Fixes volume mounts to `/bitnami/postgresql` (where the Bitnami entrypoint expects data): the `dekube.yaml` `volumes:` mapping of the PVC if there is one, `<volume_root>/<service>` otherwise
 - Mounts generated secrets to `/opt/bitnami/postgresql/secrets`
 
 ### Keycloak (`bitnami/keycloak`)

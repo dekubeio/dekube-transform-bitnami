@@ -37,6 +37,36 @@ class BitnamiWorkarounds:  # pylint: disable=too-few-public-methods  # contract:
         return BitnamiWorkarounds._repo_name(image) == name_fragment
 
     @staticmethod
+    def _mapped_data_path(svc, mount_paths, ctx):
+        """Host path of an existing bind mount on one of mount_paths, if the user chose it.
+
+        The engine already resolved the PVC through dekube.yaml `volumes:`, but this
+        transform used to ignore that and mount <volume_root>/<service>. The first run
+        auto-registers every PVC as `<claim>: {host_path: <claim>}`, so existing installs
+        carry such an entry while their data sits in <volume_root>/<service>: honoring it
+        would point them at an empty directory. Only an explicit mapping (host_path
+        different from its key) is kept.
+        """
+        volume_root = ctx.config.get("volume_root", "./data")
+        explicit = set()
+        for claim, cfg in (ctx.config.get("volumes") or {}).items():
+            host_path = (cfg or {}).get("host_path") if isinstance(cfg, dict) else None
+            if host_path and host_path != claim:
+                # same resolution as the engine's _resolve_host_path (not public API)
+                if host_path == "$volume_root" or host_path.startswith("$volume_root/"):
+                    host_path = volume_root + host_path[len("$volume_root"):]
+                elif not host_path.startswith(("/", "./", "../")):
+                    host_path = f"{volume_root}/{host_path}"
+                explicit.add(host_path)
+        for vol in svc.get("volumes") or []:
+            if not isinstance(vol, str):
+                continue
+            host, sep, rest = vol.partition(":")
+            if sep and host in explicit and rest.split(":", 1)[0] in mount_paths:
+                return host
+        return None
+
+    @staticmethod
     def _find_secret(secrets, candidates):
         """Find the first matching Secret from a list of candidate names."""
         for name in candidates:
@@ -77,11 +107,19 @@ class BitnamiWorkarounds:  # pylint: disable=too-few-public-methods  # contract:
         svc["command"] = cmd
 
         volume_root = ctx.config.get("volume_root", "./data")
-        svc["volumes"] = [f"{volume_root}/{svc_name}:/data"]
-        log(self.name, f"{svc_name}: volume → {volume_root}/{svc_name}:/data")
+        host = (self._mapped_data_path(svc, ("/data", "/bitnami/redis/data"), ctx)
+                or f"{volume_root}/{svc_name}")
+        svc["volumes"] = [f"{host}:/data"]
+        log(self.name, f"{svc_name}: volume → {host}:/data")
 
         svc.pop("environment", None)
         log(self.name, f"{svc_name}: removed Bitnami environment")
+
+        # The chart probe runs /health/*.sh under /bin/bash, absent from the alpine image.
+        # redis-cli exits 0 on any reply (NOAUTH included) and 1 when nothing listens.
+        if svc.get("healthcheck"):
+            svc["healthcheck"]["test"] = ["CMD", "redis-cli", "ping"]
+            log(self.name, f"{svc_name}: healthcheck → redis-cli ping")
 
     # ---------------------------------------------------------------------------
     # PostgreSQL
@@ -96,8 +134,10 @@ class BitnamiWorkarounds:  # pylint: disable=too-few-public-methods  # contract:
                     if ":/bitnami/postgresql" not in v
                     and ":/opt/bitnami/postgresql/secrets" not in v]
 
-        volumes = [f"{volume_root}/{svc_name}:/bitnami/postgresql"]
-        log(self.name, f"{svc_name}: data volume → /bitnami/postgresql")
+        host = (self._mapped_data_path(svc, ("/bitnami/postgresql",), ctx)
+                or f"{volume_root}/{svc_name}")
+        volumes = [f"{host}:/bitnami/postgresql"]
+        log(self.name, f"{svc_name}: data volume → {host}:/bitnami/postgresql")
 
         volumes.append(f"./secrets/{svc_name}:/opt/bitnami/postgresql/secrets:ro")
         log(self.name, f"{svc_name}: secrets mount → /opt/bitnami/postgresql/secrets")
